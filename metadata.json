@@ -1,0 +1,5 @@
+{
+  "name": " Perfect UI Check",
+  "description": "智能UI还原度比对平台。上传设计稿与实现截图，AI自动分析差异，提供还原评分与详细修改建议。",
+  "requestFramePermissions": []
+}
