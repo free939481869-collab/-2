@@ -82,7 +82,7 @@ export function App() {
                   value={figmaUrl}
                   onChange={(e) => setFigmaUrl(e.target.value)}
                   placeholder="https://www.figma.com/file/..."
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none transition-all text-sm"
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white text-gray-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none transition-all text-sm"
                />
              </div>
 
