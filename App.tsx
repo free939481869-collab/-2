@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
+import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
 import { FileUpload } from './components/FileUpload';
 import { Button } from './components/Button';
 import { ResultCard } from './components/ResultCard';
@@ -14,6 +16,10 @@ export function App() {
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [errorMsg, setErrorMsg] = useState<string>('');
   const [selectedIssueIndex, setSelectedIssueIndex] = useState<number | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
+  
+  // Ref for the content we want to print to PDF
+  const reportRef = useRef<HTMLDivElement>(null);
 
   const handleAnalysis = async () => {
     if (!designImage || !implImage) {
@@ -44,6 +50,45 @@ export function App() {
     setResult(null);
     setStatus(AppState.IDLE);
     setSelectedIssueIndex(null);
+  };
+
+  const handleExportPDF = async () => {
+    if (!reportRef.current || !result) return;
+    
+    setIsExporting(true);
+    // Give React a moment to render the expanded view (remove scrollbars)
+    await new Promise(resolve => setTimeout(resolve, 200));
+
+    try {
+      const element = reportRef.current;
+      const canvas = await html2canvas(element, {
+        scale: 2, // Higher scale for better quality
+        useCORS: true, // Allow loading cross-origin images (like data URIs)
+        backgroundColor: '#ffffff',
+        logging: false
+      });
+
+      const imgData = canvas.toDataURL('image/png');
+      const imgWidth = canvas.width;
+      const imgHeight = canvas.height;
+
+      // Use a custom page size based on the content height to avoid ugly page breaks
+      // The unit is 'px', matching canvas dimensions
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'px',
+        format: [imgWidth, imgHeight + 40] // Add slight padding
+      });
+
+      pdf.addImage(imgData, 'PNG', 0, 20, imgWidth, imgHeight);
+      pdf.save(`PixelPerfect_Report_${new Date().toISOString().slice(0, 10)}.pdf`);
+
+    } catch (err) {
+      console.error("PDF Export failed", err);
+      alert("导出失败，请重试");
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   return (
@@ -145,29 +190,45 @@ export function App() {
             )}
 
             {status === AppState.SUCCESS && result && implImage && (
-              <div className="space-y-6">
-                 {/* Visual Comparison Area */}
-                 <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm">
-                    <h3 className="font-bold text-gray-800 mb-4 flex items-center justify-between">
-                      <span>可视化差异标记</span>
-                      <span className="text-xs font-normal text-gray-500 bg-gray-100 px-2 py-1 rounded">Based on Implementation</span>
-                    </h3>
-                    <div className="relative rounded-lg overflow-hidden border border-gray-100 bg-gray-50">
-                      <ImageAnnotator 
-                        imageUrl={implImage.previewUrl} 
-                        issues={result.issues}
-                        activeIndex={selectedIssueIndex}
-                        onIssueClick={(idx) => setSelectedIssueIndex(idx)}
-                      />
-                    </div>
-                 </div>
+              <>
+                {/* Wrap content in a ref to capture it for PDF */}
+                <div ref={reportRef} className="space-y-6 bg-gray-50 p-1"> 
+                   {/* Visual Comparison Area */}
+                   <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm break-inside-avoid">
+                      <h3 className="font-bold text-gray-800 mb-4 flex items-center justify-between">
+                        <span>可视化差异标记</span>
+                        <span className="text-xs font-normal text-gray-500 bg-gray-100 px-2 py-1 rounded">Based on Implementation</span>
+                      </h3>
+                      <div className="relative rounded-lg overflow-hidden border border-gray-100 bg-gray-50">
+                        <ImageAnnotator 
+                          imageUrl={implImage.previewUrl} 
+                          issues={result.issues}
+                          activeIndex={selectedIssueIndex}
+                          onIssueClick={(idx) => setSelectedIssueIndex(idx)}
+                        />
+                      </div>
+                   </div>
 
-                 <ResultCard 
-                    result={result} 
-                    activeIndex={selectedIssueIndex}
-                    onIssueSelect={(idx) => setSelectedIssueIndex(idx)}
-                 />
-              </div>
+                   <ResultCard 
+                      result={result} 
+                      activeIndex={selectedIssueIndex}
+                      onIssueSelect={(idx) => setSelectedIssueIndex(idx)}
+                      isExpanded={isExporting} // Pass true during export to show full list
+                   />
+                </div>
+
+                <div className="mt-6 flex justify-end">
+                   <Button 
+                     variant="secondary" 
+                     onClick={handleExportPDF}
+                     isLoading={isExporting}
+                     className="w-full sm:w-auto"
+                   >
+                     <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                     {isExporting ? '正在生成 PDF...' : '导出分析报告'}
+                   </Button>
+                </div>
+              </>
             )}
             
             {status === AppState.ERROR && (

@@ -1,9 +1,47 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { AnalysisResult, IssueCategory, IssueSeverity } from "../types";
 
-// Helper to remove data URL prefix for Gemini API
-const cleanBase64 = (base64: string) => {
-  return base64.replace(/^data:image\/(png|jpeg|jpg|webp);base64,/, "");
+// Helper to resize and compress images to avoid payload too large errors (500)
+// and speed up upload. Target max width 1024px, JPEG quality 0.8.
+const compressImage = (base64Str: string): Promise<string> => {
+  return new Promise((resolve) => {
+    // If it's already a raw base64 string without header, just return it (though usually it has header from FileReader)
+    const src = base64Str.startsWith('data:') ? base64Str : `data:image/png;base64,${base64Str}`;
+    
+    const img = new Image();
+    img.src = src;
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const MAX_WIDTH = 1024;
+      let width = img.width;
+      let height = img.height;
+
+      if (width > MAX_WIDTH) {
+        height = Math.round((height * MAX_WIDTH) / width);
+        width = MAX_WIDTH;
+      }
+
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        resolve(base64Str.replace(/^data:image\/\w+;base64,/, ""));
+        return;
+      }
+      
+      // Draw white background for transparent images (since we convert to JPEG)
+      ctx.fillStyle = "#FFFFFF";
+      ctx.fillRect(0, 0, width, height);
+      ctx.drawImage(img, 0, 0, width, height);
+      
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+      resolve(dataUrl.replace(/^data:image\/\w+;base64,/, ""));
+    };
+    img.onerror = () => {
+      // Fallback to original if loading fails
+      resolve(base64Str.replace(/^data:image\/\w+;base64,/, ""));
+    };
+  });
 };
 
 const RESPONSE_SCHEMA = {
@@ -88,6 +126,25 @@ Provide the output in valid JSON format matching the schema.
 Language: Simplified Chinese (zh-CN).
 `;
 
+const ERROR_MAPPINGS: Record<string, string> = {
+  "412": "所在地区暂不支持 Gemini API，请尝试使用代理或更换 IP (412 Precondition Failed)。",
+  "403": "API Key 无效或无权限，请检查配置 (403 Forbidden)。",
+  "500": "服务器处理失败，图片可能过大或内容过于复杂，已尝试压缩重试 (500 Internal Error)。",
+  "503": "服务暂时不可用，请稍后重试 (503 Service Unavailable)。",
+  "Failed to fetch": "网络请求失败，请检查网络连接或代理设置。",
+  "Overloaded": "模型负载过高，请稍后重试。"
+};
+
+const getFriendlyErrorMessage = (error: any): string => {
+  const msg = error?.message || String(error);
+  for (const [key, friendlyMsg] of Object.entries(ERROR_MAPPINGS)) {
+    if (msg.includes(key)) {
+      return friendlyMsg;
+    }
+  }
+  return `分析服务异常: ${msg.slice(0, 100)}...`;
+};
+
 export const analyzeUiDifferences = async (
   designImageBase64: string,
   implImageBase64: string,
@@ -98,7 +155,19 @@ export const analyzeUiDifferences = async (
     throw new Error("API Key is missing in environment variables");
   }
 
-  const ai = new GoogleGenAI({ apiKey });
+  // Support for custom Base URL (e.g. proxy)
+  // Use 'any' cast because the type definition might not explicitly include baseUrl in all versions, 
+  // but it is supported by the underlying client.
+  const ai = new GoogleGenAI({ 
+    apiKey,
+    baseUrl: process.env.API_BASE_URL 
+  } as any);
+
+  // 1. Compress images before sending to reduce payload and avoid timeouts
+  const [designData, implData] = await Promise.all([
+    compressImage(designImageBase64),
+    compressImage(implImageBase64)
+  ]);
 
   const basePrompt = `
   请对比这两张图片。
@@ -110,17 +179,17 @@ export const analyzeUiDifferences = async (
   对于每个问题，请准确标注在第二张图（实现图）上的位置坐标 (boundingBox)，使用 [ymin, xmin, ymax, xmax] (0-1000 scale) 格式。
   `;
 
-  // Helper function to run analysis with a specific model and configuration
   const runAnalysis = async (modelName: string, useSchema: boolean) => {
     console.log(`Analyzing with model: ${modelName}, useSchema: ${useSchema}`);
 
-    // If schema is not supported, we must ask for JSON in the prompt explicitly
     const finalPrompt = useSchema 
       ? basePrompt 
       : basePrompt + "\n请直接输出 JSON 格式结果。不要使用 Markdown 代码块。JSON 结构需包含 score (number), summary (string), issues (array of objects with category, severity, description, suggestion, location, boundingBox).";
 
     const config: any = {
       systemInstruction: SYSTEM_INSTRUCTION,
+      // Increase temperature slightly for creativity in finding issues, but keep it low for consistency
+      temperature: 0.4, 
     };
 
     if (useSchema) {
@@ -134,8 +203,8 @@ export const analyzeUiDifferences = async (
         contents: {
           parts: [
             { text: finalPrompt },
-            { inlineData: { mimeType: "image/png", data: cleanBase64(designImageBase64) } },
-            { inlineData: { mimeType: "image/png", data: cleanBase64(implImageBase64) } }
+            { inlineData: { mimeType: "image/jpeg", data: designData } },
+            { inlineData: { mimeType: "image/jpeg", data: implData } }
           ]
         },
         config
@@ -144,8 +213,6 @@ export const analyzeUiDifferences = async (
       const text = response.text;
       if (!text) throw new Error("No response from AI");
 
-      // Attempt to parse JSON. 
-      // If we didn't use schema, the model might wrap it in markdown ```json ... ```
       const cleanedText = text.replace(/```json\n?|\n?```/g, "").trim();
       return JSON.parse(cleanedText) as AnalysisResult;
 
@@ -155,19 +222,27 @@ export const analyzeUiDifferences = async (
     }
   };
 
+  // 3-Tier Fallback Strategy
   try {
-    // 1. Try Gemini 3 Pro first (Smartest, supports Schema)
+    // Tier 1: Gemini 3 Pro (Best Quality)
     return await runAnalysis("gemini-3-pro-preview", true);
   } catch (error: any) {
-    console.warn("Gemini 3 Pro failed, switching to Nano Banana (gemini-2.5-flash-image)...", error);
+    console.warn("Tier 1 (Gemini 3 Pro) failed. Trying Tier 2...");
     
-    // 2. Fallback to Nano Banana (gemini-2.5-flash-image) as requested.
-    // Note: Nano Banana models do NOT support responseSchema or responseMimeType.
     try {
+      // Tier 2: Gemini 2.5 Flash Image (Fastest, optimized for images)
+      // Note: No responseSchema support
       return await runAnalysis("gemini-2.5-flash-image", false);
-    } catch (fallbackError) {
-      console.error("Nano Banana fallback also failed:", fallbackError);
-      throw error; // Throw the original error or the new one
+    } catch (error2: any) {
+       console.warn("Tier 2 (Gemini 2.5 Flash Image) failed. Trying Tier 3...");
+
+       try {
+         // Tier 3: Gemini 3 Flash (Backup, supports Schema)
+         return await runAnalysis("gemini-3-flash-preview", true);
+       } catch (error3: any) {
+         console.error("All models failed.");
+         throw new Error(getFriendlyErrorMessage(error3));
+       }
     }
   }
 };

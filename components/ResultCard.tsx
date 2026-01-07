@@ -5,6 +5,7 @@ interface ResultCardProps {
   result: AnalysisResult;
   activeIndex: number | null;
   onIssueSelect: (index: number) => void;
+  isExpanded?: boolean; // New prop to expand list for PDF export
 }
 
 const SeverityBadge = ({ severity }: { severity: IssueSeverity }) => {
@@ -32,7 +33,7 @@ const CategoryIcon = ({ category }: { category: IssueCategory }) => {
   return <span className="text-sm mr-2 opacity-80" role="img" aria-label={category}>{icons[category]}</span>;
 };
 
-export const ResultCard: React.FC<ResultCardProps> = ({ result, activeIndex, onIssueSelect }) => {
+export const ResultCard: React.FC<ResultCardProps> = ({ result, activeIndex, onIssueSelect, isExpanded = false }) => {
   const itemRefs = useRef<(HTMLDivElement | null)[]>([]);
   
   const getScoreColor = (score: number) => {
@@ -48,13 +49,13 @@ export const ResultCard: React.FC<ResultCardProps> = ({ result, activeIndex, onI
   };
 
   useEffect(() => {
-    if (activeIndex !== null && itemRefs.current[activeIndex]) {
+    if (activeIndex !== null && itemRefs.current[activeIndex] && !isExpanded) {
       itemRefs.current[activeIndex]?.scrollIntoView({ 
         behavior: 'smooth', 
         block: 'center' 
       });
     }
-  }, [activeIndex]);
+  }, [activeIndex, isExpanded]);
 
   return (
     <div className="w-full space-y-6 animate-fade-in-up">
@@ -76,7 +77,8 @@ export const ResultCard: React.FC<ResultCardProps> = ({ result, activeIndex, onI
           <div className="text-xs text-gray-400">AI Analysis Result</div>
         </div>
         
-        <div className="divide-y divide-gray-100 max-h-[600px] overflow-y-auto">
+        {/* Conditional styling: Remove max-height and overflow if isExpanded is true */}
+        <div className={`divide-y divide-gray-100 ${isExpanded ? '' : 'max-h-[600px] overflow-y-auto'}`}>
           {result.issues.length === 0 ? (
              <div className="p-8 text-center text-gray-500">
                 <p>太棒了！没有发现明显的还原问题。</p>
