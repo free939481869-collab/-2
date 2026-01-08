@@ -1,23 +1,73 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { AnalysisResult, Issue, IssueCategory, IssueSeverity } from '../types';
 
 interface ResultCardProps {
   result: AnalysisResult;
   activeIndex: number | null;
   onIssueSelect: (index: number) => void;
-  isExpanded?: boolean; // New prop to expand list for PDF export
+  onSeverityChange?: (index: number, newSeverity: IssueSeverity) => void;
+  isExpanded?: boolean;
 }
 
-const SeverityBadge = ({ severity }: { severity: IssueSeverity }) => {
+const SeveritySelector = ({ 
+  severity, 
+  onSelect 
+}: { 
+  severity: IssueSeverity, 
+  onSelect: (s: IssueSeverity) => void 
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
   const colors = {
-    [IssueSeverity.HIGH]: "bg-red-100 text-red-700 border-red-200",
-    [IssueSeverity.MEDIUM]: "bg-orange-100 text-orange-700 border-orange-200",
-    [IssueSeverity.LOW]: "bg-blue-100 text-blue-700 border-blue-200"
+    [IssueSeverity.HIGH]: "bg-red-100 text-red-700 border-red-200 hover:bg-red-200",
+    [IssueSeverity.MEDIUM]: "bg-orange-100 text-orange-700 border-orange-200 hover:bg-orange-200",
+    [IssueSeverity.LOW]: "bg-blue-100 text-blue-700 border-blue-200 hover:bg-blue-200"
   };
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   return (
-    <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full border ${colors[severity]}`}>
-      {severity}
-    </span>
+    <div className="relative" ref={containerRef}>
+      <button 
+        onClick={(e) => {
+          e.stopPropagation();
+          setIsOpen(!isOpen);
+        }}
+        className={`text-xs font-semibold px-2.5 py-1 rounded-full border transition-colors flex items-center gap-1.5 ${colors[severity]}`}
+      >
+        {severity}
+        <svg className={`w-3 h-3 transition-transform ${isOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+
+      {isOpen && (
+        <div className="absolute right-0 mt-1 w-24 bg-white border border-gray-200 rounded-lg shadow-xl z-[60] overflow-hidden animate-fade-in py-1">
+          {Object.values(IssueSeverity).map((s) => (
+            <button
+              key={s}
+              className={`w-full text-left px-3 py-1.5 text-xs font-medium hover:bg-gray-50 transition-colors ${s === severity ? 'text-indigo-600 bg-indigo-50' : 'text-gray-600'}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                onSelect(s);
+                setIsOpen(false);
+              }}
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 };
 
@@ -33,7 +83,13 @@ const CategoryIcon = ({ category }: { category: IssueCategory }) => {
   return <span className="text-sm mr-2 opacity-80" role="img" aria-label={category}>{icons[category]}</span>;
 };
 
-export const ResultCard: React.FC<ResultCardProps> = ({ result, activeIndex, onIssueSelect, isExpanded = false }) => {
+export const ResultCard: React.FC<ResultCardProps> = ({ 
+  result, 
+  activeIndex, 
+  onIssueSelect, 
+  onSeverityChange,
+  isExpanded = false 
+}) => {
   const itemRefs = useRef<(HTMLDivElement | null)[]>([]);
   
   const getScoreColor = (score: number) => {
@@ -77,7 +133,6 @@ export const ResultCard: React.FC<ResultCardProps> = ({ result, activeIndex, onI
           <div className="text-xs text-gray-400">AI Analysis Result</div>
         </div>
         
-        {/* Conditional styling: Remove max-height and overflow if isExpanded is true */}
         <div className={`divide-y divide-gray-100 ${isExpanded ? '' : 'max-h-[600px] overflow-y-auto'}`}>
           {result.issues.length === 0 ? (
              <div className="p-8 text-center text-gray-500">
@@ -110,7 +165,10 @@ export const ResultCard: React.FC<ResultCardProps> = ({ result, activeIndex, onI
                       @{issue.location}
                     </span>
                   </div>
-                  <SeverityBadge severity={issue.severity} />
+                  <SeveritySelector 
+                    severity={issue.severity} 
+                    onSelect={(newSev) => onSeverityChange && onSeverityChange(idx, newSev)}
+                  />
                 </div>
                 
                 <h4 className="text-gray-800 font-medium text-sm mb-1 ml-8 leading-relaxed">{issue.description}</h4>

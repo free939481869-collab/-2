@@ -4,6 +4,7 @@ interface FileUploadProps {
   label: string;
   subLabel?: string;
   onFileSelect: (file: File, base64: string) => void;
+  onRemove?: () => void;
   selectedPreview?: string;
   accept?: string;
 }
@@ -12,6 +13,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({
   label, 
   subLabel,
   onFileSelect, 
+  onRemove,
   selectedPreview,
   accept = "image/png, image/jpeg" 
 }) => {
@@ -40,6 +42,16 @@ export const FileUpload: React.FC<FileUploadProps> = ({
     }
   };
 
+  const handleClear = (e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent triggering the click on the parent container
+    if (onRemove) {
+      onRemove();
+    }
+    if (inputRef.current) {
+      inputRef.current.value = '';
+    }
+  };
+
   return (
     <div className="flex flex-col gap-2 w-full">
       <label className="text-sm font-semibold text-gray-700">{label}</label>
@@ -63,9 +75,22 @@ export const FileUpload: React.FC<FileUploadProps> = ({
               alt="Preview" 
               className="w-full h-full object-contain p-2"
             />
-            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-              <p className="text-white font-medium bg-black/50 px-4 py-2 rounded-full backdrop-blur-sm">更换图片</p>
+            
+            {/* Overlay for change */}
+            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
+              <p className="text-white font-medium bg-black/50 px-4 py-2 rounded-full backdrop-blur-sm">点击更换图片</p>
             </div>
+
+            {/* Delete Button */}
+            <button
+              onClick={handleClear}
+              className="absolute top-3 right-3 w-10 h-10 bg-white/80 hover:bg-red-500 hover:text-white text-gray-600 rounded-full shadow-lg flex items-center justify-center backdrop-blur-sm transition-all duration-200 z-10 group/btn"
+              title="删除图片"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-4v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+            </button>
           </>
         ) : (
           <div className="flex flex-col items-center justify-center pt-5 pb-6 text-center px-4">

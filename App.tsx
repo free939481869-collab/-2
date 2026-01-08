@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 import { FileUpload } from './components/FileUpload';
@@ -6,7 +6,7 @@ import { Button } from './components/Button';
 import { ResultCard } from './components/ResultCard';
 import { ImageAnnotator } from './components/ImageAnnotator';
 import { analyzeUiDifferences } from './services/geminiService';
-import { AnalysisResult, AppState, UploadedImage } from './types';
+import { AnalysisResult, AppState, UploadedImage, IssueSeverity } from './types';
 
 export function App() {
   const [designImage, setDesignImage] = useState<UploadedImage | null>(null);
@@ -43,6 +43,18 @@ export function App() {
     }
   };
 
+  const handleSeverityChange = useCallback((index: number, newSeverity: IssueSeverity) => {
+    if (!result) return;
+    
+    const newIssues = [...result.issues];
+    newIssues[index] = { ...newIssues[index], severity: newSeverity };
+    
+    setResult({
+      ...result,
+      issues: newIssues
+    });
+  }, [result]);
+
   const reset = () => {
     setDesignImage(null);
     setImplImage(null);
@@ -73,11 +85,10 @@ export function App() {
       const imgHeight = canvas.height;
 
       // Use a custom page size based on the content height to avoid ugly page breaks
-      // The unit is 'px', matching canvas dimensions
       const pdf = new jsPDF({
         orientation: 'portrait',
         unit: 'px',
-        format: [imgWidth, imgHeight + 40] // Add slight padding
+        format: [imgWidth, imgHeight + 40]
       });
 
       pdf.addImage(imgData, 'PNG', 0, 20, imgWidth, imgHeight);
@@ -118,7 +129,7 @@ export function App() {
         {/* Configuration Section */}
         <div className={`grid grid-cols-1 ${status === AppState.SUCCESS ? 'lg:grid-cols-12' : 'lg:grid-cols-2'} gap-8 mb-10 transition-all duration-500`}>
           
-          {/* Input Panel - Hide/Shrink when success to give more room to results */}
+          {/* Input Panel */}
           <div className={`space-y-4 ${status === AppState.SUCCESS ? 'lg:col-span-4 hidden lg:block' : 'lg:col-span-1'}`}>
              <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
                <label className="block text-sm font-semibold text-gray-700 mb-2">Figma 链接 (可选)</label>
@@ -137,6 +148,7 @@ export function App() {
                   subLabel="Figma 导出图"
                   selectedPreview={designImage?.previewUrl}
                   onFileSelect={(file, base64) => setDesignImage({ file, previewUrl: base64, base64 })}
+                  onRemove={() => setDesignImage(null)}
                 />
                 
                 <FileUpload 
@@ -144,6 +156,7 @@ export function App() {
                   subLabel="前端开发截图"
                   selectedPreview={implImage?.previewUrl}
                   onFileSelect={(file, base64) => setImplImage({ file, previewUrl: base64, base64 })}
+                  onRemove={() => setImplImage(null)}
                 />
              </div>
              
@@ -191,9 +204,7 @@ export function App() {
 
             {status === AppState.SUCCESS && result && implImage && (
               <>
-                {/* Wrap content in a ref to capture it for PDF */}
                 <div ref={reportRef} className="space-y-6 bg-gray-50 p-1"> 
-                   {/* Visual Comparison Area */}
                    <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm break-inside-avoid">
                       <h3 className="font-bold text-gray-800 mb-4 flex items-center justify-between">
                         <span>可视化差异标记</span>
@@ -201,7 +212,8 @@ export function App() {
                       </h3>
                       <div className="relative rounded-lg overflow-hidden border border-gray-100 bg-gray-50">
                         <ImageAnnotator 
-                          imageUrl={implImage.previewUrl} 
+                          imageUrl={implImage.previewUrl}
+                          designImageUrl={designImage?.previewUrl} 
                           issues={result.issues}
                           activeIndex={selectedIssueIndex}
                           onIssueClick={(idx) => setSelectedIssueIndex(idx)}
@@ -213,7 +225,8 @@ export function App() {
                       result={result} 
                       activeIndex={selectedIssueIndex}
                       onIssueSelect={(idx) => setSelectedIssueIndex(idx)}
-                      isExpanded={isExporting} // Pass true during export to show full list
+                      onSeverityChange={handleSeverityChange}
+                      isExpanded={isExporting}
                    />
                 </div>
 
