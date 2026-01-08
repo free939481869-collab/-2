@@ -6,6 +6,7 @@ interface ResultCardProps {
   activeIndex: number | null;
   onIssueSelect: (index: number) => void;
   onSeverityChange?: (index: number, newSeverity: IssueSeverity) => void;
+  onToggleIgnore?: (index: number) => void;
   isExpanded?: boolean;
 }
 
@@ -83,14 +84,117 @@ const CategoryIcon = ({ category }: { category: IssueCategory }) => {
   return <span className="text-sm mr-2 opacity-80" role="img" aria-label={category}>{icons[category]}</span>;
 };
 
+// Helper component for a single issue row to reduce duplication
+interface IssueRowProps {
+  issue: Issue;
+  idx: number;
+  isActive: boolean;
+  onSelect: (idx: number) => void;
+  onSeverityChange?: (idx: number, sev: IssueSeverity) => void;
+  onToggleIgnore?: (idx: number) => void;
+}
+
+const IssueRow: React.FC<IssueRowProps> = ({ 
+  issue, 
+  idx, 
+  isActive, 
+  onSelect, 
+  onSeverityChange, 
+  onToggleIgnore 
+}) => {
+  const isIgnored = !!issue.isIgnored;
+
+  return (
+    <div 
+      onClick={() => onSelect(idx)}
+      className={`p-5 transition-all duration-300 cursor-pointer group relative border-l-4
+        ${isActive 
+          ? 'bg-indigo-50 border-l-indigo-500 shadow-inner' 
+          : isIgnored 
+            ? 'bg-gray-50 border-l-gray-300 opacity-75 hover:opacity-100' 
+            : 'hover:bg-gray-50 border-l-transparent hover:border-l-indigo-200'}
+      `}
+    >
+      <div className="flex justify-between items-start mb-2">
+        <div className="flex items-center gap-2">
+          <span className={`flex items-center justify-center w-5 h-5 rounded-full text-xs font-bold mr-1
+            ${isActive ? 'bg-indigo-600 text-white' : isIgnored ? 'bg-gray-400 text-white' : 'bg-gray-200 text-gray-600'}
+          `}>
+            {idx + 1}
+          </span>
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium bg-white border border-gray-200 text-gray-800 shadow-sm">
+            <CategoryIcon category={issue.category} />
+            {issue.category}
+          </span>
+          <span className="text-xs text-gray-400 font-mono bg-gray-50 px-2 rounded">
+            @{issue.location}
+          </span>
+          {isIgnored && (
+            <span className="ml-2 px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-gray-200 text-gray-500">
+              已忽略
+            </span>
+          )}
+        </div>
+        
+        <div className="flex items-center gap-2">
+          {!isIgnored && (
+             <SeveritySelector 
+              severity={issue.severity} 
+              onSelect={(newSev) => onSeverityChange && onSeverityChange(idx, newSev)}
+            />
+          )}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleIgnore && onToggleIgnore(idx);
+            }}
+            className={`p-1.5 rounded-full transition-colors ${
+              isIgnored 
+                ? 'text-indigo-600 hover:bg-indigo-100' 
+                : 'text-gray-400 hover:text-red-500 hover:bg-red-50'
+            }`}
+            title={isIgnored ? "恢复显示 (Show)" : "忽略此问题 (Ignore)"}
+          >
+            {isIgnored ? (
+              // Eye Icon (Show)
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+              </svg>
+            ) : (
+              // Eye Slash Icon (Ignore)
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+              </svg>
+            )}
+          </button>
+        </div>
+      </div>
+      
+      <h4 className={`font-medium text-sm mb-1 ml-8 leading-relaxed ${isIgnored ? 'text-gray-500 line-through' : 'text-gray-800'}`}>
+        {issue.description}
+      </h4>
+      
+      {issue.suggestion && !isIgnored && (
+        <div className="mt-2 ml-8 text-sm text-indigo-600 bg-white p-2 rounded-lg border border-indigo-100 inline-block shadow-sm">
+          <span className="font-semibold text-xs uppercase tracking-wider mr-1">Fix:</span> 
+          {issue.suggestion}
+        </div>
+      )}
+    </div>
+  );
+};
+
 export const ResultCard: React.FC<ResultCardProps> = ({ 
   result, 
   activeIndex, 
   onIssueSelect, 
   onSeverityChange,
+  onToggleIgnore,
   isExpanded = false 
 }) => {
   const itemRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const [showIgnoredSection, setShowIgnoredSection] = useState(false);
   
   const getScoreColor = (score: number) => {
     if (score >= 90) return 'text-green-600';
@@ -113,6 +217,9 @@ export const ResultCard: React.FC<ResultCardProps> = ({
     }
   }, [activeIndex, isExpanded]);
 
+  const visibleIssues = result.issues.filter(i => !i.isIgnored);
+  const ignoredIssues = result.issues.filter(i => i.isIgnored);
+
   return (
     <div className="w-full space-y-6 animate-fade-in-up">
       {/* Score Header */}
@@ -129,60 +236,77 @@ export const ResultCard: React.FC<ResultCardProps> = ({
       {/* Issues Grid */}
       <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
-          <h3 className="font-bold text-gray-800">问题清单 ({result.issues.length})</h3>
+          <h3 className="font-bold text-gray-800">问题清单 ({visibleIssues.length})</h3>
           <div className="text-xs text-gray-400">AI Analysis Result</div>
         </div>
         
         <div className={`divide-y divide-gray-100 ${isExpanded ? '' : 'max-h-[600px] overflow-y-auto'}`}>
-          {result.issues.length === 0 ? (
+          {visibleIssues.length === 0 && ignoredIssues.length === 0 ? (
              <div className="p-8 text-center text-gray-500">
                 <p>太棒了！没有发现明显的还原问题。</p>
              </div>
           ) : (
-            result.issues.map((issue, idx) => (
-              <div 
-                key={idx} 
-                ref={el => { itemRefs.current[idx] = el; }}
-                onClick={() => onIssueSelect(idx)}
-                className={`p-5 transition-all duration-300 cursor-pointer group relative border-l-4
-                  ${activeIndex === idx 
-                    ? 'bg-indigo-50 border-l-indigo-500 shadow-inner' 
-                    : 'hover:bg-gray-50 border-l-transparent hover:border-l-indigo-200'}
-                `}
-              >
-                <div className="flex justify-between items-start mb-2">
-                  <div className="flex items-center gap-2">
-                    <span className={`flex items-center justify-center w-5 h-5 rounded-full text-xs font-bold mr-1
-                      ${activeIndex === idx ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-600'}
-                    `}>
-                      {idx + 1}
-                    </span>
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium bg-white border border-gray-200 text-gray-800 shadow-sm">
-                      <CategoryIcon category={issue.category} />
-                      {issue.category}
-                    </span>
-                    <span className="text-xs text-gray-400 font-mono bg-gray-50 px-2 rounded">
-                      @{issue.location}
-                    </span>
-                  </div>
-                  <SeveritySelector 
-                    severity={issue.severity} 
-                    onSelect={(newSev) => onSeverityChange && onSeverityChange(idx, newSev)}
+            // Map over ALL issues but render null for ignored ones to preserve index
+            result.issues.map((issue, idx) => {
+              if (issue.isIgnored) return null;
+              return (
+                <div key={idx} ref={el => { itemRefs.current[idx] = el; }}>
+                  <IssueRow 
+                    issue={issue} 
+                    idx={idx} 
+                    isActive={activeIndex === idx} 
+                    onSelect={onIssueSelect}
+                    onSeverityChange={onSeverityChange}
+                    onToggleIgnore={onToggleIgnore}
                   />
                 </div>
-                
-                <h4 className="text-gray-800 font-medium text-sm mb-1 ml-8 leading-relaxed">{issue.description}</h4>
-                
-                {issue.suggestion && (
-                  <div className="mt-2 ml-8 text-sm text-indigo-600 bg-white p-2 rounded-lg border border-indigo-100 inline-block shadow-sm">
-                    <span className="font-semibold text-xs uppercase tracking-wider mr-1">Fix:</span> 
-                    {issue.suggestion}
-                  </div>
-                )}
-              </div>
-            ))
+              );
+            })
+          )}
+          
+          {visibleIssues.length === 0 && ignoredIssues.length > 0 && !showIgnoredSection && (
+            <div className="p-8 text-center text-gray-500">
+              <p>所有问题已被忽略。</p>
+            </div>
           )}
         </div>
+
+        {/* Ignored Issues Section */}
+        {ignoredIssues.length > 0 && (
+          <div className="border-t border-gray-100 bg-gray-50">
+            <button 
+              onClick={() => setShowIgnoredSection(!showIgnoredSection)}
+              className="w-full px-6 py-3 flex items-center justify-between text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+            >
+              <span className="font-medium flex items-center gap-2">
+                <svg className={`w-4 h-4 transition-transform ${showIgnoredSection ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+                </svg>
+                已忽略的问题 ({ignoredIssues.length})
+              </span>
+              <span className="text-xs">点击{showIgnoredSection ? '折叠' : '展开'}</span>
+            </button>
+            
+            {showIgnoredSection && (
+              <div className="divide-y divide-gray-200 border-t border-gray-200">
+                {result.issues.map((issue, idx) => {
+                  if (!issue.isIgnored) return null;
+                  return (
+                    <IssueRow 
+                      key={idx}
+                      issue={issue} 
+                      idx={idx} 
+                      isActive={activeIndex === idx} 
+                      onSelect={onIssueSelect}
+                      // No severity change for ignored issues usually, but can keep if desired
+                      onToggleIgnore={onToggleIgnore}
+                    />
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

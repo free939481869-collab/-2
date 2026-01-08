@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useRef, useCallback, useMemo } from 'react';
 import { Issue, IssueSeverity } from '../types';
 
 interface ImageAnnotatorProps {
@@ -9,17 +9,28 @@ interface ImageAnnotatorProps {
   onIssueClick?: (index: number) => void;
 }
 
-// Component to render a cropped version of an image
-const CroppedImage = ({ src, box }: { src: string, box: number[] }) => {
+// --- Helper: Severity Styles ---
+const getSeverityColor = (severity: IssueSeverity, isActive: boolean) => {
+  if (isActive) return 'border-indigo-600 bg-indigo-500/20 text-indigo-700 ring-4 ring-indigo-200 z-50';
+  switch (severity) {
+    case IssueSeverity.HIGH: return 'border-red-500 bg-red-500/10 text-red-600';
+    case IssueSeverity.MEDIUM: return 'border-orange-500 bg-orange-500/10 text-orange-600';
+    case IssueSeverity.LOW: return 'border-blue-500 bg-blue-500/10 text-blue-600';
+    default: return 'border-gray-500 bg-gray-500/10 text-gray-600';
+  }
+};
+
+// --- Component: CroppedImage (Memoized) ---
+const CroppedImage = React.memo(({ src, box }: { src: string, box: number[] }) => {
   const imgRef = useRef<HTMLImageElement>(null);
   const [styles, setStyles] = useState<React.CSSProperties>({ opacity: 0 });
+  
+  // Guard against invalid box data
+  if (!box || box.length !== 4) return null;
+  
   const [ymin, xmin, ymax, xmax] = box;
 
-  // We want to display the crop in a container.
-  // We'll use a container with a fixed aspect ratio matching the crop (assuming square pixels).
-  // Then we position the image to show that crop.
-  
-  const handleLoad = () => {
+  const handleLoad = useCallback(() => {
     if (!imgRef.current) return;
     const { naturalWidth, naturalHeight } = imgRef.current;
     
@@ -32,19 +43,11 @@ const CroppedImage = ({ src, box }: { src: string, box: number[] }) => {
     const cropW = (xmax - xmin) * scaleX;
     const cropH = (ymax - ymin) * scaleY;
     
-    // We want the cropped area (cropW x cropH) to fill the container (100% x 100%).
-    // Image width relative to container width = naturalWidth / cropW * 100%
+    // Prevent divide by zero
+    if (cropW === 0 || cropH === 0) return;
+
     const widthPct = (naturalWidth / cropW) * 100;
     const heightPct = (naturalHeight / cropH) * 100;
-    
-    // Position
-    // left: -cropX / cropW * 100% of container width?
-    // cropX / naturalWidth is the ratio.
-    // We want to shift left by cropX.
-    // In percentages of the rendered image size: shift = (cropX / naturalWidth) * 100%.
-    // But we are setting 'left' on the image relative to container.
-    // Better to use transform translate.
-    // translate(-cropX/naturalWidth * 100% of image width)
     
     setStyles({
       width: `${widthPct}%`,
@@ -54,12 +57,14 @@ const CroppedImage = ({ src, box }: { src: string, box: number[] }) => {
       position: 'absolute',
       top: 0,
       left: 0,
-      maxWidth: 'none', // Override tailwind
+      maxWidth: 'none', 
       opacity: 1
     });
-  };
+  }, [xmin, xmax, ymin, ymax]);
 
-  const aspectRatio = (xmax - xmin) / (ymax - ymin);
+  // Handle potential division by zero in aspect ratio
+  const height = ymax - ymin;
+  const aspectRatio = height > 0 ? (xmax - xmin) / height : 1;
 
   return (
     <div 
@@ -70,6 +75,8 @@ const CroppedImage = ({ src, box }: { src: string, box: number[] }) => {
         ref={imgRef}
         src={src} 
         alt="Crop" 
+        loading="lazy"
+        decoding="async"
         onLoad={handleLoad}
         style={styles}
       />
@@ -80,93 +87,153 @@ const CroppedImage = ({ src, box }: { src: string, box: number[] }) => {
       )}
     </div>
   );
-};
+});
 
+CroppedImage.displayName = 'CroppedImage';
+
+// --- Component: IssueMarker (Memoized) ---
+interface IssueMarkerProps {
+  issue: Issue;
+  index: number;
+  isActive: boolean;
+  isHovered: boolean;
+  designImageUrl?: string;
+  onMouseEnter: (index: number) => void;
+  onMouseLeave: () => void;
+  onClick: (index: number) => void;
+  onCompare: (e: React.MouseEvent, issue: Issue) => void;
+}
+
+const IssueMarker = React.memo(({ 
+  issue, 
+  index, 
+  isActive, 
+  isHovered, 
+  designImageUrl, 
+  onMouseEnter, 
+  onMouseLeave, 
+  onClick, 
+  onCompare 
+}: IssueMarkerProps) => {
+  
+  if (!issue.boundingBox || issue.boundingBox.length !== 4) return null;
+
+  const [ymin, xmin, ymax, xmax] = issue.boundingBox;
+  
+  // Memoize style to avoid recalculation on every render
+  const style = useMemo(() => ({
+    top: `${ymin / 10}%`,
+    left: `${xmin / 10}%`,
+    height: `${(ymax - ymin) / 10}%`,
+    width: `${(xmax - xmin) / 10}%`,
+  }), [ymin, xmin, ymax, xmax]);
+
+  const colorClass = getSeverityColor(issue.severity, isActive);
+
+  return (
+    <div
+      className={`absolute border-2 transition-all duration-200 cursor-pointer 
+        ${colorClass} 
+        ${(isHovered || isActive) ? 'opacity-100' : 'opacity-70 hover:opacity-100'}
+        ${isActive ? 'z-50' : 'z-10'}
+      `}
+      style={style}
+      onMouseEnter={() => onMouseEnter(index)}
+      onMouseLeave={onMouseLeave}
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick(index);
+      }}
+    >
+      {/* Tooltip - Only render if hovered to save DOM nodes */}
+      {isHovered && !isActive && (
+        <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-max max-w-[200px] sm:max-w-xs bg-gray-900 text-white text-xs rounded-md py-2 px-3 shadow-xl pointer-events-none z-30 animate-fade-in">
+          <div className="font-bold mb-1">{issue.category}: {issue.description}</div>
+          <div className="absolute left-1/2 -translate-x-1/2 top-full w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[6px] border-t-gray-900"></div>
+        </div>
+      )}
+      
+      {/* Number badge */}
+      <div className={`absolute -top-3 -left-3 w-6 h-6 rounded-full text-white text-xs font-bold flex items-center justify-center shadow-sm 
+        ${isActive ? 'bg-indigo-600' : colorClass.split(' ')[0].replace('border-', 'bg-')}
+      `}>
+        {index + 1}
+      </div>
+
+      {/* Compare Button - Visible on hover or active */}
+      {(isHovered || isActive) && designImageUrl && (
+          <button
+            className="absolute -top-3 -right-3 w-6 h-6 rounded-full bg-white text-gray-700 shadow-md flex items-center justify-center hover:bg-gray-100 hover:text-indigo-600 transition-colors border border-gray-200 z-50"
+            onClick={(e) => onCompare(e, issue)}
+            title="查看设计对比"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16l2.879-2.879m0 0a3 3 0 104.243-4.242 3 3 0 00-4.243 4.242zM21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+          </button>
+      )}
+    </div>
+  );
+});
+
+IssueMarker.displayName = 'IssueMarker';
+
+// --- Main Component ---
 export const ImageAnnotator: React.FC<ImageAnnotatorProps> = ({ imageUrl, designImageUrl, issues, activeIndex, onIssueClick }) => {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [compareIssue, setCompareIssue] = useState<Issue | null>(null);
+  
+  // Refs for debouncing - explicitly typed as number for browser environment
+  const hoverTimeoutRef = useRef<number | null>(null);
 
-  const getSeverityColor = (severity: IssueSeverity, isActive: boolean) => {
-    if (isActive) return 'border-indigo-600 bg-indigo-500/20 text-indigo-700 ring-4 ring-indigo-200 z-50';
-    switch (severity) {
-      case IssueSeverity.HIGH: return 'border-red-500 bg-red-500/10 text-red-600';
-      case IssueSeverity.MEDIUM: return 'border-orange-500 bg-orange-500/10 text-orange-600';
-      case IssueSeverity.LOW: return 'border-blue-500 bg-blue-500/10 text-blue-600';
-      default: return 'border-gray-500 bg-gray-500/10 text-gray-600';
-    }
-  };
+  // Debounced Hover Handler
+  const handleMouseEnter = useCallback((index: number) => {
+    if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+    // Small delay prevents flickering when moving fast over gaps or overlapping areas
+    hoverTimeoutRef.current = window.setTimeout(() => {
+      setHoveredIndex(index);
+    }, 30);
+  }, []);
 
-  const handleCompareClick = (e: React.MouseEvent, issue: Issue) => {
+  const handleMouseLeave = useCallback(() => {
+    if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+    hoverTimeoutRef.current = window.setTimeout(() => {
+      setHoveredIndex(null);
+    }, 30);
+  }, []);
+
+  const handleCompareClick = useCallback((e: React.MouseEvent, issue: Issue) => {
     e.stopPropagation();
     setCompareIssue(issue);
-  };
+  }, []);
+
+  const handleIssueClick = useCallback((index: number) => {
+    if (onIssueClick) onIssueClick(index);
+  }, [onIssueClick]);
 
   return (
     <div className="relative w-full font-sans select-none">
       <img 
         src={imageUrl} 
         alt="Analyzed UI" 
+        decoding="async"
         className="w-full h-auto block rounded-lg shadow-sm border border-gray-200"
       />
       
       {issues.map((issue, idx) => {
-        if (!issue.boundingBox || issue.boundingBox.length !== 4) return null;
+        if (issue.isIgnored) return null;
         
-        const [ymin, xmin, ymax, xmax] = issue.boundingBox;
-        
-        const style = {
-          top: `${ymin / 10}%`,
-          left: `${xmin / 10}%`,
-          height: `${(ymax - ymin) / 10}%`,
-          width: `${(xmax - xmin) / 10}%`,
-        };
-
-        const isActive = activeIndex === idx;
-        const isHovered = hoveredIndex === idx;
-        const colorClass = getSeverityColor(issue.severity, isActive);
-
         return (
-          <div
+          <IssueMarker
             key={idx}
-            className={`absolute border-2 transition-all duration-200 cursor-pointer 
-              ${colorClass} 
-              ${(isHovered || isActive) ? 'opacity-100' : 'opacity-70 hover:opacity-100'}
-              ${isActive ? 'z-50' : 'z-10'}
-            `}
-            style={style}
-            onMouseEnter={() => setHoveredIndex(idx)}
-            onMouseLeave={() => setHoveredIndex(null)}
-            onClick={(e) => {
-              e.stopPropagation();
-              onIssueClick && onIssueClick(idx);
-            }}
-          >
-            {/* Tooltip */}
-            {isHovered && !isActive && (
-              <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-max max-w-[200px] sm:max-w-xs bg-gray-900 text-white text-xs rounded-md py-2 px-3 shadow-xl pointer-events-none z-30">
-                <div className="font-bold mb-1">{issue.category}: {issue.description}</div>
-                <div className="absolute left-1/2 -translate-x-1/2 top-full w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[6px] border-t-gray-900"></div>
-              </div>
-            )}
-            
-            {/* Number badge */}
-            <div className={`absolute -top-3 -left-3 w-6 h-6 rounded-full text-white text-xs font-bold flex items-center justify-center shadow-sm 
-              ${isActive ? 'bg-indigo-600' : colorClass.split(' ')[0].replace('border-', 'bg-')}
-            `}>
-              {idx + 1}
-            </div>
-
-            {/* Compare Button - Visible on hover or active */}
-            {(isHovered || isActive) && designImageUrl && (
-               <button
-                 className="absolute -top-3 -right-3 w-6 h-6 rounded-full bg-white text-gray-700 shadow-md flex items-center justify-center hover:bg-gray-100 hover:text-indigo-600 transition-colors border border-gray-200 z-50"
-                 onClick={(e) => handleCompareClick(e, issue)}
-                 title="查看设计对比"
-               >
-                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16l2.879-2.879m0 0a3 3 0 104.243-4.242 3 3 0 00-4.243 4.242zM21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-               </button>
-            )}
-          </div>
+            index={idx}
+            issue={issue}
+            isActive={activeIndex === idx}
+            isHovered={hoveredIndex === idx}
+            designImageUrl={designImageUrl}
+            onMouseEnter={handleMouseEnter}
+            onMouseLeave={handleMouseLeave}
+            onClick={handleIssueClick}
+            onCompare={handleCompareClick}
+          />
         );
       })}
 

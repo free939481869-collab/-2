@@ -20,6 +20,7 @@ export interface Issue {
   suggestion: string;
   location: string;
   boundingBox?: number[]; // [ymin, xmin, ymax, xmax] on 0-1000 scale
+  isIgnored?: boolean;
 }
 
 export interface AnalysisResult {

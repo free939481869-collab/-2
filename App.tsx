@@ -55,6 +55,24 @@ export function App() {
     });
   }, [result]);
 
+  const toggleIssueIgnore = useCallback((index: number) => {
+    if (!result) return;
+    
+    const newIssues = [...result.issues];
+    const newIsIgnored = !newIssues[index].isIgnored;
+    newIssues[index] = { ...newIssues[index], isIgnored: newIsIgnored };
+    
+    setResult({
+      ...result,
+      issues: newIssues
+    });
+
+    // If we just ignored the currently selected issue, deselect it
+    if (selectedIssueIndex === index && newIsIgnored) {
+      setSelectedIssueIndex(null);
+    }
+  }, [result, selectedIssueIndex]);
+
   const reset = () => {
     setDesignImage(null);
     setImplImage(null);
@@ -226,6 +244,7 @@ export function App() {
                       activeIndex={selectedIssueIndex}
                       onIssueSelect={(idx) => setSelectedIssueIndex(idx)}
                       onSeverityChange={handleSeverityChange}
+                      onToggleIgnore={toggleIssueIgnore}
                       isExpanded={isExporting}
                    />
                 </div>
