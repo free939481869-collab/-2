@@ -10,6 +10,45 @@ import { analyzeUiDifferences } from './services/geminiService';
 import { extractFigmaStyles, formatStyleInfo } from './services/figmaService';
 import { AnalysisResult, AppState, UploadedImage, IssueSeverity } from './types';
 
+// Logo 组件，处理图片加载失败的情况
+function LogoImage() {
+  const [imgSrc, setImgSrc] = useState('https://i.ibb.co/yny1GPVs/logo-2x.png');
+  const [showPlaceholder, setShowPlaceholder] = useState(false);
+  const attemptRef = useRef(0);
+
+  const handleError = () => {
+    attemptRef.current += 1;
+    
+    if (attemptRef.current === 1) {
+      // 第一次失败：尝试 jpg 格式
+      setImgSrc('https://i.ibb.co/yny1GPVs/logo-2x.jpg');
+    } else if (attemptRef.current === 2) {
+      // 第二次失败：尝试不带扩展名
+      setImgSrc('https://i.ibb.co/yny1GPVs/logo-2x');
+    } else {
+      // 所有尝试都失败，显示占位符
+      setShowPlaceholder(true);
+    }
+  };
+
+  if (showPlaceholder) {
+    return (
+      <div className="w-full h-full flex items-center justify-center text-white font-bold text-lg">
+        P
+      </div>
+    );
+  }
+
+  return (
+    <img 
+      src={imgSrc} 
+      alt="PixelPerfect Logo" 
+      className="w-full h-full object-cover"
+      onError={handleError}
+    />
+  );
+}
+
 export function App() {
   const [designImage, setDesignImage] = useState<UploadedImage | null>(null);
   const [implImage, setImplImage] = useState<UploadedImage | null>(null);
@@ -163,8 +202,8 @@ export function App() {
       <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-bold text-lg">
-              P
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center overflow-hidden bg-indigo-600">
+              <LogoImage />
             </div>
             <h1 className="text-xl font-bold text-gray-900 tracking-tight">PixelPerfect <span className="text-indigo-600 font-light">Check</span></h1>
           </div>
