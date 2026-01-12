@@ -11,7 +11,7 @@ const getDefaultConfig = (): ApiConfig => {
     id: DEFAULT_CONFIG_ID,
     name: '默认配置（环境变量）',
     apiKey: process.env.API_KEY || '',
-    baseUrl: process.env.API_BASE_URL,
+    baseUrl: process.env.API_BASE_URL || undefined,
     models: ['gemini-3-pro-preview', 'gemini-2.5-flash-image', 'gemini-3-flash-preview'],
     isDefault: true
   };
