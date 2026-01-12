@@ -5,7 +5,9 @@ import { FileUpload } from './components/FileUpload';
 import { Button } from './components/Button';
 import { ResultCard } from './components/ResultCard';
 import { ImageAnnotator } from './components/ImageAnnotator';
+import { ApiConfigManager } from './components/ApiConfigManager';
 import { analyzeUiDifferences } from './services/geminiService';
+import { extractFigmaStyles, formatStyleInfo } from './services/figmaService';
 import { AnalysisResult, AppState, UploadedImage, IssueSeverity } from './types';
 
 export function App() {
@@ -17,6 +19,10 @@ export function App() {
   const [errorMsg, setErrorMsg] = useState<string>('');
   const [selectedIssueIndex, setSelectedIssueIndex] = useState<number | null>(null);
   const [isExporting, setIsExporting] = useState(false);
+  const [selectedConfigId, setSelectedConfigId] = useState<string | undefined>();
+  const [showConfigManager, setShowConfigManager] = useState(false);
+  const [figmaStyleInfo, setFigmaStyleInfo] = useState<string>('');
+  const [isExtractingStyles, setIsExtractingStyles] = useState(false);
   
   // Ref for the content we want to print to PDF
   const reportRef = useRef<HTMLDivElement>(null);
@@ -31,15 +37,46 @@ export function App() {
     setErrorMsg('');
     setResult(null);
     setSelectedIssueIndex(null);
+    setFigmaStyleInfo('');
+    setIsExtractingStyles(false);
 
     try {
-      const data = await analyzeUiDifferences(designImage.base64, implImage.base64, figmaUrl);
+      // 如果提供了 Figma URL，先提取样式信息（用于UI显示）
+      let extractedStyleInfo: any = null;
+      if (figmaUrl && figmaUrl.trim()) {
+        setIsExtractingStyles(true);
+        try {
+          extractedStyleInfo = await extractFigmaStyles(figmaUrl, selectedConfigId);
+          if (extractedStyleInfo) {
+            const formatted = formatStyleInfo(extractedStyleInfo);
+            setFigmaStyleInfo(formatted);
+            console.log('Figma styles extracted:', extractedStyleInfo);
+          } else {
+            console.warn('Failed to extract Figma styles, continuing with analysis...');
+          }
+        } catch (styleError) {
+          console.warn('Figma style extraction failed:', styleError);
+          // 继续进行分析，即使样式提取失败
+        } finally {
+          setIsExtractingStyles(false);
+        }
+      }
+
+      // 传递已提取的样式信息，避免重复提取
+      const data = await analyzeUiDifferences(
+        designImage.base64, 
+        implImage.base64, 
+        figmaUrl, 
+        selectedConfigId,
+        extractedStyleInfo
+      );
       setResult(data);
       setStatus(AppState.SUCCESS);
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
       setStatus(AppState.ERROR);
-      setErrorMsg("分析过程中出现错误，请检查网络或 API Key 设置。");
+      setErrorMsg(error.message || "分析过程中出现错误，请检查网络或 API Key 设置。");
+      setIsExtractingStyles(false);
     }
   };
 
@@ -131,7 +168,20 @@ export function App() {
             </div>
             <h1 className="text-xl font-bold text-gray-900 tracking-tight">PixelPerfect <span className="text-indigo-600 font-light">Check</span></h1>
           </div>
-          <div className="text-sm text-gray-500 hidden sm:block">AI 驱动的 UI 还原度走查工具</div>
+          <div className="flex items-center gap-4">
+            <div className="text-sm text-gray-500 hidden sm:block">AI 驱动的 UI 还原度走查工具</div>
+            <Button
+              variant="secondary"
+              onClick={() => setShowConfigManager(!showConfigManager)}
+              className="text-sm px-4 py-2"
+            >
+              <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+              API 配置
+            </Button>
+          </div>
         </div>
       </header>
 
@@ -149,6 +199,13 @@ export function App() {
           
           {/* Input Panel */}
           <div className={`space-y-4 ${status === AppState.SUCCESS ? 'lg:col-span-4 hidden lg:block' : 'lg:col-span-1'}`}>
+             {showConfigManager && (
+               <ApiConfigManager
+                 onConfigSelect={setSelectedConfigId}
+                 selectedConfigId={selectedConfigId}
+               />
+             )}
+             
              <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
                <label className="block text-sm font-semibold text-gray-700 mb-2">Figma 链接 (可选)</label>
                <input 
@@ -213,10 +270,22 @@ export function App() {
             )}
             
             {status === AppState.ANALYZING && (
-              <div className="h-full min-h-[500px] flex flex-col items-center justify-center bg-white/80 backdrop-blur-sm rounded-3xl border border-gray-100 shadow-sm">
+              <div className="h-full min-h-[500px] flex flex-col items-center justify-center bg-white/80 backdrop-blur-sm rounded-3xl border border-gray-100 shadow-sm p-6">
                 <div className="w-16 h-16 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mb-6"></div>
-                <h3 className="text-xl font-bold text-gray-800 animate-pulse">AI 正在逐像素比对...</h3>
-                <p className="text-gray-500 mt-2">正在检测文字、配色、间距差异</p>
+                <h3 className="text-xl font-bold text-gray-800 animate-pulse">
+                  {isExtractingStyles ? '正在提取 Figma 样式信息...' : 'AI 正在逐像素比对...'}
+                </h3>
+                <p className="text-gray-500 mt-2">
+                  {isExtractingStyles 
+                    ? '正在从 Figma 链接读取颜色、间距、尺寸、文本等信息'
+                    : '正在检测文字、配色、间距差异'}
+                </p>
+                {figmaStyleInfo && (
+                  <div className="mt-6 max-w-2xl w-full p-4 bg-indigo-50 border border-indigo-200 rounded-xl text-left">
+                    <h4 className="text-sm font-semibold text-indigo-900 mb-2">已提取的 Figma 样式信息：</h4>
+                    <pre className="text-xs text-indigo-700 whitespace-pre-wrap font-mono">{figmaStyleInfo}</pre>
+                  </div>
+                )}
               </div>
             )}
 

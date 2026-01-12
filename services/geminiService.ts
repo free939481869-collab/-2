@@ -1,5 +1,7 @@
 import { GoogleGenAI, Type } from "@google/genai";
-import { AnalysisResult, IssueCategory, IssueSeverity } from "../types";
+import { AnalysisResult, IssueCategory, IssueSeverity, ApiConfig, FigmaStyleInfo } from "../types";
+import { getActiveConfig } from "./configService";
+import { extractFigmaStyles, formatStyleInfo } from "./figmaService";
 
 // Helper to resize and compress images to avoid payload too large errors (500)
 // and speed up upload. Target max width 1024px, JPEG quality 0.8.
@@ -148,34 +150,69 @@ const getFriendlyErrorMessage = (error: any): string => {
 export const analyzeUiDifferences = async (
   designImageBase64: string,
   implImageBase64: string,
-  figmaUrl?: string
+  figmaUrl?: string,
+  configId?: string,
+  figmaStyleInfo?: FigmaStyleInfo | null
 ): Promise<AnalysisResult> => {
-  const apiKey = process.env.API_KEY;
-  if (!apiKey) {
-    throw new Error("API Key is missing in environment variables");
+  // 获取配置（优先使用传入的 configId，否则使用默认配置）
+  const config = getActiveConfig(configId);
+  if (!config) {
+    throw new Error("未找到可用的 API 配置，请先添加配置");
+  }
+
+  if (!config.apiKey) {
+    throw new Error("API Key 未设置，请检查配置");
   }
 
   // Support for custom Base URL (e.g. proxy)
   // Use 'any' cast because the type definition might not explicitly include baseUrl in all versions, 
   // but it is supported by the underlying client.
   const ai = new GoogleGenAI({ 
-    apiKey,
-    baseUrl: process.env.API_BASE_URL 
+    apiKey: config.apiKey,
+    baseUrl: config.baseUrl 
   } as any);
 
   // 1. Compress images before sending to reduce payload and avoid timeouts
+  // 2. Extract Figma styles if URL is provided and not already extracted
   const [designData, implData] = await Promise.all([
     compressImage(designImageBase64),
     compressImage(implImageBase64)
   ]);
 
+  // Only extract Figma styles if not already provided
+  let extractedStyleInfo = figmaStyleInfo;
+  if (!extractedStyleInfo && figmaUrl) {
+    extractedStyleInfo = await extractFigmaStyles(figmaUrl, configId);
+  }
+
+  // 构建包含 Figma 样式信息的提示
+  let styleContext = '';
+  if (extractedStyleInfo) {
+    const formattedStyles = formatStyleInfo(extractedStyleInfo);
+    if (formattedStyles) {
+      styleContext = `
+      
+**Figma 设计稿样式信息：**
+${formattedStyles}
+
+请参考以上样式信息进行对比分析，确保实现与设计稿的样式完全一致。
+`;
+    }
+  }
+
   const basePrompt = `
   请对比这两张图片。
   第一张图是：Figma 设计原稿 (Standard)。
   第二张图是：前端开发实现 (Implementation)。
-  ${figmaUrl ? `Figma 链接参考 (Context only): ${figmaUrl}` : ''}
+  ${figmaUrl ? `Figma 链接: ${figmaUrl}` : ''}${styleContext}
   
-  请详细分析还原度问题。请务必严格检查文字大小、颜色差异、间距对齐等细节。
+  请详细分析还原度问题。请务必严格检查：
+  1. **颜色**：背景色、文字颜色、边框颜色是否与设计稿一致
+  2. **间距**：padding、margin、gap 是否准确
+  3. **尺寸**：宽度、高度、圆角等尺寸是否匹配
+  4. **字体**：字体族、字号、字重、行高、字间距是否一致
+  5. **文本内容**：中英文文本是否完全一致
+  
   对于每个问题，请准确标注在第二张图（实现图）上的位置坐标 (boundingBox)，使用 [ymin, xmin, ymax, xmax] (0-1000 scale) 格式。
   `;
 
@@ -222,27 +259,58 @@ export const analyzeUiDifferences = async (
     }
   };
 
-  // 3-Tier Fallback Strategy
-  try {
-    // Tier 1: Gemini 3 Pro (Best Quality)
-    return await runAnalysis("gemini-3-pro-preview", true);
-  } catch (error: any) {
-    console.warn("Tier 1 (Gemini 3 Pro) failed. Trying Tier 2...");
+  // 使用配置中的模型列表，按顺序尝试
+  const models = config.models || ['gemini-3-pro-preview', 'gemini-2.5-flash-image', 'gemini-3-flash-preview'];
+  
+  // 过滤出有效的模型名称（非空且非空白字符）
+  const validModels = models.map(m => m.trim()).filter(m => m.length > 0);
+  
+  // 如果没有有效的模型，抛出明确的错误
+  if (validModels.length === 0) {
+    throw new Error("配置中没有有效的模型名称，请检查 API 配置中的模型列表");
+  }
+  
+  // 判断模型是否支持 schema（基于经验值，某些模型不支持）
+  const supportsSchema = (modelName: string): boolean => {
+    // 这些模型已知支持 schema
+    const schemaSupportedModels = [
+      'gemini-3-pro-preview',
+      'gemini-3-flash-preview',
+      'gemini-2.0-flash-exp',
+      'gemini-1.5-pro',
+      'gemini-1.5-flash'
+    ];
+    return schemaSupportedModels.some(m => modelName.includes(m));
+  };
+
+  let lastError: any = null;
+  
+  for (let i = 0; i < validModels.length; i++) {
+    const modelName = validModels[i];
     
     try {
-      // Tier 2: Gemini 2.5 Flash Image (Fastest, optimized for images)
-      // Note: No responseSchema support
-      return await runAnalysis("gemini-2.5-flash-image", false);
-    } catch (error2: any) {
-       console.warn("Tier 2 (Gemini 2.5 Flash Image) failed. Trying Tier 3...");
-
-       try {
-         // Tier 3: Gemini 3 Flash (Backup, supports Schema)
-         return await runAnalysis("gemini-3-flash-preview", true);
-       } catch (error3: any) {
-         console.error("All models failed.");
-         throw new Error(getFriendlyErrorMessage(error3));
-       }
+      const useSchema = supportsSchema(modelName);
+      console.log(`尝试模型 ${i + 1}/${validModels.length}: ${modelName} (schema: ${useSchema})`);
+      return await runAnalysis(modelName, useSchema);
+    } catch (error: any) {
+      console.warn(`模型 ${modelName} 失败:`, error);
+      lastError = error;
+      
+      // 如果是最后一个模型，抛出错误
+      if (i === validModels.length - 1) {
+        throw new Error(getFriendlyErrorMessage(error));
+      }
+      
+      // 否则继续尝试下一个模型
+      console.log(`继续尝试下一个模型...`);
     }
+  }
+  
+  // 如果所有模型都失败了（理论上不应该到达这里，因为最后一个模型会抛出错误）
+  // 但为了安全起见，仍然处理这种情况
+  if (lastError) {
+    throw new Error(getFriendlyErrorMessage(lastError));
+  } else {
+    throw new Error("所有模型尝试失败，但没有捕获到具体错误信息");
   }
 };
