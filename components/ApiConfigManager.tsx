@@ -207,7 +207,7 @@ export function ApiConfigManager({ onConfigSelect, selectedConfigId }: ApiConfig
               key={config.id}
               className={`p-4 rounded-xl border-2 transition-all cursor-pointer ${
                 selectedConfigId === config.id
-                  ? 'border-indigo-500 bg-indigo-50'
+                  ? 'border-lime-500 bg-lime-50'
                   : 'border-gray-200 hover:border-gray-300 bg-white'
               }`}
               onClick={() => onConfigSelect?.(config.id)}
@@ -217,7 +217,7 @@ export function ApiConfigManager({ onConfigSelect, selectedConfigId }: ApiConfig
                   <div className="flex items-center gap-2 mb-1">
                     <span className="font-semibold text-gray-900">{config.name}</span>
                     {config.isDefault && (
-                      <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full font-medium">
+                      <span className="text-xs bg-lime-100 text-lime-700 px-2 py-0.5 rounded-full font-medium">
                         默认
                       </span>
                     )}
@@ -240,7 +240,7 @@ export function ApiConfigManager({ onConfigSelect, selectedConfigId }: ApiConfig
                         e.stopPropagation();
                         handleSetDefault(config.id);
                       }}
-                      className="text-xs text-indigo-600 hover:text-indigo-700 px-2 py-1 rounded hover:bg-indigo-50"
+                      className="text-xs text-lime-500 hover:text-lime-600 px-2 py-1 rounded hover:bg-lime-50"
                       title="设为默认"
                     >
                       设为默认
@@ -299,7 +299,7 @@ export function ApiConfigManager({ onConfigSelect, selectedConfigId }: ApiConfig
                   placeholder="例如: Gemini API 配置"
                   className={`w-full px-4 py-3 rounded-xl border ${
                     errors.name ? 'border-red-300' : 'border-gray-200'
-                  } bg-white text-gray-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none transition-all`}
+                  } bg-white text-gray-900 focus:border-lime-500 focus:ring-2 focus:ring-lime-100 outline-none transition-all`}
                 />
                 {errors.name && <p className="text-red-500 text-xs mt-1">{errors.name}</p>}
               </div>
@@ -315,7 +315,7 @@ export function ApiConfigManager({ onConfigSelect, selectedConfigId }: ApiConfig
                   placeholder="输入你的 API Key"
                   className={`w-full px-4 py-3 rounded-xl border ${
                     errors.apiKey ? 'border-red-300' : 'border-gray-200'
-                  } bg-white text-gray-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none transition-all`}
+                  } bg-white text-gray-900 focus:border-lime-500 focus:ring-2 focus:ring-lime-100 outline-none transition-all`}
                 />
                 {errors.apiKey && <p className="text-red-500 text-xs mt-1">{errors.apiKey}</p>}
                 <p className="text-gray-500 text-xs mt-1">API Key 将安全存储在浏览器本地</p>
@@ -330,7 +330,7 @@ export function ApiConfigManager({ onConfigSelect, selectedConfigId }: ApiConfig
                   value={formData.baseUrl}
                   onChange={(e) => setFormData({ ...formData, baseUrl: e.target.value })}
                   placeholder="例如: https://api.example.com/v1"
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white text-gray-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none transition-all"
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white text-gray-900 focus:border-lime-500 focus:ring-2 focus:ring-lime-100 outline-none transition-all"
                 />
                 <p className="text-gray-500 text-xs mt-1">用于代理或自定义 API 端点，留空则使用默认地址</p>
               </div>
@@ -354,7 +354,7 @@ export function ApiConfigManager({ onConfigSelect, selectedConfigId }: ApiConfig
                         }
                       }}
                       placeholder="输入模型名称，例如: gemini-3-pro-preview"
-                      className="flex-1 px-4 py-2 rounded-xl border border-gray-200 bg-white text-gray-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none transition-all text-sm"
+                      className="flex-1 px-4 py-2 rounded-xl border border-gray-200 bg-white text-gray-900 focus:border-lime-500 focus:ring-2 focus:ring-lime-100 outline-none transition-all text-sm"
                     />
                     <Button
                       variant="secondary"
@@ -381,7 +381,7 @@ export function ApiConfigManager({ onConfigSelect, selectedConfigId }: ApiConfig
                           }
                         }}
                         disabled={modelList.includes(preset)}
-                        className="text-xs px-2 py-1 rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-indigo-50 hover:border-indigo-300 hover:text-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                        className="text-xs px-2 py-1 rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-lime-50 hover:border-lime-300 hover:text-lime-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                       >
                         {preset}
                       </button>
@@ -399,7 +399,7 @@ export function ApiConfigManager({ onConfigSelect, selectedConfigId }: ApiConfig
                     modelList.map((model, index) => (
                       <div
                         key={index}
-                        className="flex items-center gap-2 p-3 bg-white rounded-lg border border-gray-200 hover:border-indigo-300 transition-all"
+                        className="flex items-center gap-2 p-3 bg-white rounded-lg border border-gray-200 hover:border-lime-300 transition-all"
                       >
                         <div className="flex-1 flex items-center gap-2">
                           <span className="text-xs text-gray-500 font-mono bg-gray-100 px-2 py-1 rounded">
@@ -411,7 +411,7 @@ export function ApiConfigManager({ onConfigSelect, selectedConfigId }: ApiConfig
                           <button
                             onClick={() => handleMoveModel(index, 'up')}
                             disabled={index === 0}
-                            className="p-1.5 text-gray-400 hover:text-indigo-600 disabled:opacity-30 disabled:cursor-not-allowed rounded hover:bg-indigo-50 transition-all"
+                            className="p-1.5 text-gray-400 hover:text-lime-500 disabled:opacity-30 disabled:cursor-not-allowed rounded hover:bg-lime-50 transition-all"
                             title="上移"
                           >
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -421,7 +421,7 @@ export function ApiConfigManager({ onConfigSelect, selectedConfigId }: ApiConfig
                           <button
                             onClick={() => handleMoveModel(index, 'down')}
                             disabled={index === modelList.length - 1}
-                            className="p-1.5 text-gray-400 hover:text-indigo-600 disabled:opacity-30 disabled:cursor-not-allowed rounded hover:bg-indigo-50 transition-all"
+                            className="p-1.5 text-gray-400 hover:text-lime-500 disabled:opacity-30 disabled:cursor-not-allowed rounded hover:bg-lime-50 transition-all"
                             title="下移"
                           >
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

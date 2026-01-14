@@ -11,7 +11,7 @@ interface ImageAnnotatorProps {
 
 // --- Helper: Severity Styles ---
 const getSeverityColor = (severity: IssueSeverity, isActive: boolean) => {
-  if (isActive) return 'border-indigo-600 bg-indigo-500/20 text-indigo-700 ring-4 ring-indigo-200 z-50';
+  if (isActive) return 'border-lime-500 bg-lime-500/20 text-lime-700 ring-4 ring-lime-200 z-50';
   switch (severity) {
     case IssueSeverity.HIGH: return 'border-red-500 bg-red-500/10 text-red-600';
     case IssueSeverity.MEDIUM: return 'border-orange-500 bg-orange-500/10 text-orange-600';
@@ -155,7 +155,7 @@ const IssueMarker = React.memo(({
       
       {/* Number badge */}
       <div className={`absolute -top-3 -left-3 w-6 h-6 rounded-full text-white text-xs font-bold flex items-center justify-center shadow-sm 
-        ${isActive ? 'bg-indigo-600' : colorClass.split(' ')[0].replace('border-', 'bg-')}
+        ${isActive ? 'bg-lime-500' : colorClass.split(' ')[0].replace('border-', 'bg-')}
       `}>
         {index + 1}
       </div>
@@ -163,7 +163,7 @@ const IssueMarker = React.memo(({
       {/* Compare Button - Visible on hover or active */}
       {(isHovered || isActive) && designImageUrl && (
           <button
-            className="absolute -top-3 -right-3 w-6 h-6 rounded-full bg-white text-gray-700 shadow-md flex items-center justify-center hover:bg-gray-100 hover:text-indigo-600 transition-colors border border-gray-200 z-50"
+            className="absolute -top-3 -right-3 w-6 h-6 rounded-full bg-white text-gray-700 shadow-md flex items-center justify-center hover:bg-gray-100 hover:text-lime-500 transition-colors border border-gray-200 z-50"
             onClick={(e) => onCompare(e, issue)}
             title="查看设计对比"
           >
@@ -243,7 +243,7 @@ export const ImageAnnotator: React.FC<ImageAnnotatorProps> = ({ imageUrl, design
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden flex flex-col max-h-[90vh]">
             <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
                <h3 className="font-bold text-gray-800 flex items-center gap-2">
-                 <span className="bg-indigo-600 text-white text-xs px-2 py-0.5 rounded-full">#{issues.indexOf(compareIssue) + 1}</span>
+                 <span className="bg-lime-500 text-white text-xs px-2 py-0.5 rounded-full">#{issues.indexOf(compareIssue) + 1}</span>
                  {compareIssue.category} 差异对比
                </h3>
                <button onClick={() => setCompareIssue(null)} className="text-gray-400 hover:text-gray-600 transition-colors">
@@ -273,7 +273,7 @@ export const ImageAnnotator: React.FC<ImageAnnotatorProps> = ({ imageUrl, design
                 
                 {compareIssue.suggestion && (
                   <div className="mt-3 text-sm">
-                    <span className="text-indigo-600 font-medium">建议修改: </span>
+                    <span className="text-lime-600 font-medium">建议修改: </span>
                     <span className="text-gray-700 bg-white px-2 py-0.5 rounded border border-gray-200 font-mono text-xs">{compareIssue.suggestion}</span>
                   </div>
                 )}

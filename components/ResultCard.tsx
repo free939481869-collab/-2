@@ -56,7 +56,7 @@ const SeveritySelector = ({
           {Object.values(IssueSeverity).map((s) => (
             <button
               key={s}
-              className={`w-full text-left px-3 py-1.5 text-xs font-medium hover:bg-gray-50 transition-colors ${s === severity ? 'text-indigo-600 bg-indigo-50' : 'text-gray-600'}`}
+              className={`w-full text-left px-3 py-1.5 text-xs font-medium hover:bg-gray-50 transition-colors ${s === severity ? 'text-lime-600 bg-lime-50' : 'text-gray-600'}`}
               onClick={(e) => {
                 e.stopPropagation();
                 onSelect(s);
@@ -109,16 +109,16 @@ const IssueRow: React.FC<IssueRowProps> = ({
       onClick={() => onSelect(idx)}
       className={`p-5 transition-all duration-300 cursor-pointer group relative border-l-4
         ${isActive 
-          ? 'bg-indigo-50 border-l-indigo-500 shadow-inner' 
+          ? 'bg-lime-50 border-l-lime-500 shadow-inner' 
           : isIgnored 
             ? 'bg-gray-50 border-l-gray-300 opacity-75 hover:opacity-100' 
-            : 'hover:bg-gray-50 border-l-transparent hover:border-l-indigo-200'}
+            : 'hover:bg-gray-50 border-l-transparent hover:border-l-lime-200'}
       `}
     >
       <div className="flex justify-between items-start mb-2">
         <div className="flex items-center gap-2">
           <span className={`flex items-center justify-center w-5 h-5 rounded-full text-xs font-bold mr-1
-            ${isActive ? 'bg-indigo-600 text-white' : isIgnored ? 'bg-gray-400 text-white' : 'bg-gray-200 text-gray-600'}
+            ${isActive ? 'bg-lime-500 text-white' : isIgnored ? 'bg-gray-400 text-white' : 'bg-gray-200 text-gray-600'}
           `}>
             {idx + 1}
           </span>
@@ -150,7 +150,7 @@ const IssueRow: React.FC<IssueRowProps> = ({
             }}
             className={`p-1.5 rounded-full transition-colors ${
               isIgnored 
-                ? 'text-indigo-600 hover:bg-indigo-100' 
+                ? 'text-lime-600 hover:bg-lime-100' 
                 : 'text-gray-400 hover:text-red-500 hover:bg-red-50'
             }`}
             title={isIgnored ? "恢复显示 (Show)" : "忽略此问题 (Ignore)"}
@@ -176,7 +176,7 @@ const IssueRow: React.FC<IssueRowProps> = ({
       </h4>
       
       {issue.suggestion && !isIgnored && (
-        <div className="mt-2 ml-8 text-sm text-indigo-600 bg-white p-2 rounded-lg border border-indigo-100 inline-block shadow-sm">
+        <div className="mt-2 ml-8 text-sm text-lime-600 bg-white p-2 rounded-lg border border-lime-100 inline-block shadow-sm">
           <span className="font-semibold text-xs uppercase tracking-wider mr-1">Fix:</span> 
           {issue.suggestion}
         </div>
@@ -240,7 +240,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
           <div className="text-xs text-gray-400">AI Analysis Result</div>
         </div>
         
-        <div className={`divide-y divide-gray-100 ${isExpanded ? '' : 'max-h-[600px] overflow-y-auto'}`}>
+        <div className={`divide-y divide-gray-100 ${isExpanded ? '' : 'max-h-[600px] overflow-y-auto'} ${visibleIssues.length === 0 && ignoredIssues.length === 0 ? 'bg-gray-50' : 'bg-white'}`}>
           {visibleIssues.length === 0 && ignoredIssues.length === 0 ? (
              <div className="p-8 text-center text-gray-500">
                 <p>太棒了！没有发现明显的还原问题。</p>
@@ -265,7 +265,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
           )}
           
           {visibleIssues.length === 0 && ignoredIssues.length > 0 && !showIgnoredSection && (
-            <div className="p-8 text-center text-gray-500">
+            <div className="p-8 text-center text-gray-500 bg-gray-50">
               <p>所有问题已被忽略。</p>
             </div>
           )}

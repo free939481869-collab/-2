@@ -6,8 +6,10 @@ import { Button } from './components/Button';
 import { ResultCard } from './components/ResultCard';
 import { ImageAnnotator } from './components/ImageAnnotator';
 import { ApiConfigManager } from './components/ApiConfigManager';
+import { FigmaUrlInput } from './components/FigmaUrlInput';
 import { analyzeUiDifferences } from './services/geminiService';
 import { extractFigmaStyles, formatStyleInfo } from './services/figmaService';
+import { saveFigmaUrlToHistory } from './services/historyService';
 import { AnalysisResult, AppState, UploadedImage, IssueSeverity } from './types';
 
 // Logo 组件，处理图片加载失败的情况
@@ -111,6 +113,11 @@ export function App() {
       );
       setResult(data);
       setStatus(AppState.SUCCESS);
+      
+      // 保存 Figma URL 到历史记录
+      if (figmaUrl && figmaUrl.trim()) {
+        saveFigmaUrlToHistory(figmaUrl);
+      }
     } catch (error: any) {
       console.error(error);
       setStatus(AppState.ERROR);
@@ -158,6 +165,30 @@ export function App() {
     setSelectedIssueIndex(null);
   };
 
+  const handleRemoveImplImage = () => {
+    if (window.confirm('确定要删除开发截图吗？删除后将清除所有分析结果。')) {
+      setImplImage(null);
+      // 如果有分析结果，清除结果和状态
+      if (result) {
+        setResult(null);
+        setStatus(AppState.IDLE);
+        setSelectedIssueIndex(null);
+      }
+    }
+  };
+
+  const handleRemoveDesignImage = () => {
+    if (window.confirm('确定要删除设计原稿吗？删除后将清除所有分析结果。')) {
+      setDesignImage(null);
+      // 如果有分析结果，清除结果和状态
+      if (result) {
+        setResult(null);
+        setStatus(AppState.IDLE);
+        setSelectedIssueIndex(null);
+      }
+    }
+  };
+
   const handleExportPDF = async () => {
     if (!reportRef.current || !result) return;
     
@@ -202,10 +233,10 @@ export function App() {
       <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center overflow-hidden bg-indigo-600">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center overflow-hidden bg-lime-500">
               <LogoImage />
             </div>
-            <h1 className="text-xl font-bold text-gray-900 tracking-tight">PixelPerfect <span className="text-indigo-600 font-light">Check</span></h1>
+            <h1 className="text-xl font-bold text-gray-900 tracking-tight">PixelPerfect <span className="text-lime-500 font-light">Check</span></h1>
           </div>
           <div className="flex items-center gap-4">
             <div className="text-sm text-gray-500 hidden sm:block">AI 驱动的 UI 还原度走查工具</div>
@@ -247,12 +278,11 @@ export function App() {
              
              <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
                <label className="block text-sm font-semibold text-gray-700 mb-2">Figma 链接 (可选)</label>
-               <input 
-                  type="text" 
+               <FigmaUrlInput
                   value={figmaUrl}
-                  onChange={(e) => setFigmaUrl(e.target.value)}
+                  onChange={setFigmaUrl}
                   placeholder="https://www.figma.com/file/..."
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white text-gray-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none transition-all text-sm"
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white text-gray-900 focus:border-lime-500 focus:ring-2 focus:ring-lime-100 outline-none transition-all text-sm"
                />
              </div>
 
@@ -262,15 +292,15 @@ export function App() {
                   subLabel="Figma 导出图"
                   selectedPreview={designImage?.previewUrl}
                   onFileSelect={(file, base64) => setDesignImage({ file, previewUrl: base64, base64 })}
-                  onRemove={() => setDesignImage(null)}
+                  onRemove={handleRemoveDesignImage}
                 />
                 
                 <FileUpload 
                   label="2. 实现截图 (Implementation)" 
-                  subLabel="前端开发截图"
+                  subLabel="开发截图"
                   selectedPreview={implImage?.previewUrl}
                   onFileSelect={(file, base64) => setImplImage({ file, previewUrl: base64, base64 })}
-                  onRemove={() => setImplImage(null)}
+                  onRemove={handleRemoveImplImage}
                 />
              </div>
              
@@ -290,11 +320,6 @@ export function App() {
                 >
                   {status === AppState.ANALYZING ? '正在分析...' : '开始比对'}
                 </Button>
-                {status === AppState.SUCCESS && (
-                   <Button variant="secondary" onClick={reset} className="px-8">
-                     新任务
-                   </Button>
-                )}
              </div>
           </div>
 
@@ -309,8 +334,8 @@ export function App() {
             )}
             
             {status === AppState.ANALYZING && (
-              <div className="h-full min-h-[500px] flex flex-col items-center justify-center bg-white/80 backdrop-blur-sm rounded-3xl border border-gray-100 shadow-sm p-6">
-                <div className="w-16 h-16 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mb-6"></div>
+              <div className="h-full min-h-[500px] flex flex-col items-center justify-center bg-white rounded-3xl border border-gray-100 shadow-sm p-6">
+                <div className="w-16 h-16 border-4 border-lime-200 border-t-lime-500 rounded-full animate-spin mb-6"></div>
                 <h3 className="text-xl font-bold text-gray-800 animate-pulse">
                   {isExtractingStyles ? '正在提取 Figma 样式信息...' : 'AI 正在逐像素比对...'}
                 </h3>
@@ -320,9 +345,9 @@ export function App() {
                     : '正在检测文字、配色、间距差异'}
                 </p>
                 {figmaStyleInfo && (
-                  <div className="mt-6 max-w-2xl w-full p-4 bg-indigo-50 border border-indigo-200 rounded-xl text-left">
-                    <h4 className="text-sm font-semibold text-indigo-900 mb-2">已提取的 Figma 样式信息：</h4>
-                    <pre className="text-xs text-indigo-700 whitespace-pre-wrap font-mono">{figmaStyleInfo}</pre>
+                  <div className="mt-6 max-w-2xl w-full p-4 bg-lime-50 border border-lime-200 rounded-xl text-left">
+                    <h4 className="text-sm font-semibold text-lime-900 mb-2">已提取的 Figma 样式信息：</h4>
+                    <pre className="text-xs text-lime-700 whitespace-pre-wrap font-mono">{figmaStyleInfo}</pre>
                   </div>
                 )}
               </div>
