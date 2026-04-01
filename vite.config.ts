@@ -4,10 +4,28 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, '.', '');
+    const uicheckProxy = process.env.UICHECK_PROXY_PORT || '8787';
+    const uicheckTarget = `http://127.0.0.1:${uicheckProxy}`;
+
     return {
       server: {
         port: 3000,
         host: '0.0.0.0',
+        proxy: {
+          '/api/uicheck': {
+            target: uicheckTarget,
+            changeOrigin: true,
+          },
+        },
+      },
+      preview: {
+        port: 4173,
+        proxy: {
+          '/api/uicheck': {
+            target: uicheckTarget,
+            changeOrigin: true,
+          },
+        },
       },
       plugins: [react()],
       define: {

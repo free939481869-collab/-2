@@ -7,6 +7,7 @@ import { ResultCard } from './components/ResultCard';
 import { ImageAnnotator } from './components/ImageAnnotator';
 import { ApiConfigManager } from './components/ApiConfigManager';
 import { FigmaUrlInput } from './components/FigmaUrlInput';
+import { UicheckPanel } from './components/UicheckPanel';
 import { analyzeUiDifferences } from './services/geminiService';
 import { extractFigmaStyles, formatStyleInfo } from './services/figmaService';
 import { saveFigmaUrlToHistory } from './services/historyService';
@@ -407,6 +408,7 @@ export function App() {
           </div>
         </div>
 
+        <UicheckPanel />
       </main>
     </div>
   );

@@ -4,20 +4,25 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "concurrently -n vite,proxy -c blue,green \"vite\" \"node server/uicheck-proxy.mjs\"",
+    "dev:vite": "vite",
+    "dev:proxy": "node server/uicheck-proxy.mjs",
+    "uicheck:smoke": "node scripts/uicheck-smoke.mjs",
     "build": "vite build",
     "preview": "vite preview"
   },
   "dependencies": {
-    "react-dom": "^19.2.3",
-    "react": "^19.2.3",
     "@google/genai": "^1.34.0",
     "html2canvas": "1.4.1",
-    "jspdf": "2.5.1"
+    "jspdf": "2.5.1",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
     "@vitejs/plugin-react": "^5.0.0",
+    "concurrently": "^9.1.2",
+    "dotenv": "^17.3.1",
     "typescript": "~5.8.2",
     "vite": "^6.2.0"
   }
