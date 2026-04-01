@@ -3,6 +3,58 @@ import { AnalysisResult, IssueCategory, IssueSeverity, ApiConfig, FigmaStyleInfo
 import { getActiveConfig } from "./configService";
 import { extractFigmaStyles, formatStyleInfo } from "./figmaService";
 
+function isOpenAICompatible(baseUrl?: string): boolean {
+  if (!baseUrl) return false;
+  return /openrouter\.ai|openai\.com|api\.together\.xyz|api\.deepseek\.com/i.test(baseUrl);
+}
+
+async function callOpenAICompatible(
+  baseUrl: string,
+  apiKey: string,
+  model: string,
+  systemPrompt: string,
+  userPrompt: string,
+  designBase64: string,
+  implBase64: string,
+): Promise<AnalysisResult> {
+  const url = baseUrl.replace(/\/+$/, '') + '/chat/completions';
+  const body = {
+    model,
+    temperature: 0.4,
+    messages: [
+      { role: 'system', content: systemPrompt },
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: userPrompt + '\n请直接输出 JSON 格式结果。不要使用 Markdown 代码块。JSON 结构需包含 score (number), summary (string), issues (array of objects with category, severity, description, suggestion, location, boundingBox).' },
+          { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${designBase64}` } },
+          { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${implBase64}` } },
+        ],
+      },
+    ],
+  };
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '');
+    throw new Error(`${res.status} ${errText.slice(0, 200)}`);
+  }
+
+  const data = await res.json();
+  const raw: string = data?.choices?.[0]?.message?.content ?? '';
+  if (!raw) throw new Error('No response from AI');
+  const cleaned = raw.replace(/```json\n?|\n?```/g, '').trim();
+  return JSON.parse(cleaned) as AnalysisResult;
+}
+
 // Helper to resize and compress images to avoid payload too large errors (500)
 // and speed up upload. Target max width 1024px, JPEG quality 0.8.
 const compressImage = (base64Str: string): Promise<string> => {
@@ -259,20 +311,16 @@ ${formattedStyles}
     }
   };
 
-  // 使用配置中的模型列表，按顺序尝试
+  const useOpenAI = isOpenAICompatible(config.baseUrl);
+
   const models = config.models || ['gemini-3-pro-preview', 'gemini-2.5-flash-image', 'gemini-3-flash-preview'];
-  
-  // 过滤出有效的模型名称（非空且非空白字符）
   const validModels = models.map(m => m.trim()).filter(m => m.length > 0);
-  
-  // 如果没有有效的模型，抛出明确的错误
+
   if (validModels.length === 0) {
     throw new Error("配置中没有有效的模型名称，请检查 API 配置中的模型列表");
   }
-  
-  // 判断模型是否支持 schema（基于经验值，某些模型不支持）
+
   const supportsSchema = (modelName: string): boolean => {
-    // 这些模型已知支持 schema
     const schemaSupportedModels = [
       'gemini-3-pro-preview',
       'gemini-3-flash-preview',
@@ -284,30 +332,38 @@ ${formattedStyles}
   };
 
   let lastError: any = null;
-  
+
   for (let i = 0; i < validModels.length; i++) {
     const modelName = validModels[i];
-    
+
     try {
-      const useSchema = supportsSchema(modelName);
-      console.log(`尝试模型 ${i + 1}/${validModels.length}: ${modelName} (schema: ${useSchema})`);
-      return await runAnalysis(modelName, useSchema);
+      if (useOpenAI) {
+        console.log(`尝试模型 ${i + 1}/${validModels.length}: ${modelName} (OpenAI 兼容)`);
+        return await callOpenAICompatible(
+          config.baseUrl!,
+          config.apiKey,
+          modelName,
+          SYSTEM_INSTRUCTION,
+          basePrompt,
+          designData,
+          implData,
+        );
+      } else {
+        const useSchema = supportsSchema(modelName);
+        console.log(`尝试模型 ${i + 1}/${validModels.length}: ${modelName} (Gemini, schema: ${useSchema})`);
+        return await runAnalysis(modelName, useSchema);
+      }
     } catch (error: any) {
       console.warn(`模型 ${modelName} 失败:`, error);
       lastError = error;
-      
-      // 如果是最后一个模型，抛出错误
+
       if (i === validModels.length - 1) {
         throw new Error(getFriendlyErrorMessage(error));
       }
-      
-      // 否则继续尝试下一个模型
       console.log(`继续尝试下一个模型...`);
     }
   }
-  
-  // 如果所有模型都失败了（理论上不应该到达这里，因为最后一个模型会抛出错误）
-  // 但为了安全起见，仍然处理这种情况
+
   if (lastError) {
     throw new Error(getFriendlyErrorMessage(lastError));
   } else {

@@ -28,14 +28,16 @@ export function ApiConfigManager({ onConfigSelect, selectedConfigId }: ApiConfig
   const [newModelInput, setNewModelInput] = useState('');
   const [errors, setErrors] = useState<Partial<Record<keyof ApiConfigFormData, string>>>({});
 
-  // 预设的常见模型列表
   const presetModels = [
     'gemini-3-pro-preview',
     'gemini-3-flash-preview',
     'gemini-2.5-flash-image',
     'gemini-2.0-flash-exp',
     'gemini-1.5-pro',
-    'gemini-1.5-flash'
+    'gemini-1.5-flash',
+    'qwen/qwen3.6-plus-preview:free',
+    'qwen/qwen-2.5-vl-72b-instruct:free',
+    'google/gemini-2.5-flash-preview:free',
   ];
 
   useEffect(() => {
